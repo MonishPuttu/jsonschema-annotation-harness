@@ -1,9 +1,9 @@
-FROM python:3.14.0-alpine
+FROM python:3.11-slim
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir jsonschema packaging
+COPY . /app
 
-COPY annotation_runner.py .
+RUN pip install jsonschema packaging referencing
 
-CMD ["python", "/app/annotation_runner.py"]
+CMD ["python", "annotation_runner.py"]
