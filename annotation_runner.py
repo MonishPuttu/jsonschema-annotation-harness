@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from importlib import metadata
 from typing import TYPE_CHECKING
 import json
@@ -10,6 +10,7 @@ import sys
 import traceback
 
 from jsonschema.validators import validator_for
+from validators.python_jsonschema import JsonSchemaValidator
 from packaging.version import parse
 
 jsonschema_version = metadata.version("jsonschema")
@@ -45,6 +46,7 @@ class Runner:
     _stdout: "io.TextIOWrapper" = sys.stdout
     _DefaultValidator: "Validator | None" = None
     _default_spec = None
+    _validator: JsonSchemaValidator = field(default_factory=JsonSchemaValidator)
 
     def run(self, stdin=sys.stdin):
         for line in stdin:
@@ -154,9 +156,7 @@ class Runner:
 
                 instance = test["instance"]
 
-                valid = validator.is_valid(instance)
-
-                annotations = self.extract_annotations(schema)
+                valid, annotations = self._validator.validate(schema, instance)
 
                 results.append(
                     {
