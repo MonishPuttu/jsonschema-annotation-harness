@@ -37,3 +37,20 @@ Expected result:
 }
 ]
 }
+
+## Tests
+
+Annotation tests were copied from the official JSON Schema Test Suite
+
+Files were taken from annotations/tests and placed in tests/.
+
+Run them with:
+
+python run_tests.py
+
+The runner executes the tests against the harness and compares returned annotations with expected values.
+
+Notes
+
+- Used a streaming execution model (single container session)
+- Runs official annotation tests locally against the harness
