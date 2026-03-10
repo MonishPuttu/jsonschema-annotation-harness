@@ -29,11 +29,11 @@ Example session:
 Expected result:
 
 {
- "seq":1,
- "results":[
-   {
-     "valid":true,
-     "annotations":{"title":["User"]}
-   }
- ]
+"seq":1,
+"results":[
+{
+"valid":true,
+"annotations":{"title":["User"]}
+}
+]
 }

@@ -28,11 +28,14 @@ if TYPE_CHECKING:
 
 ANNOTATION_KEYS = [
     "title",
+    "description",
     "default",
     "examples",
     "deprecated",
     "readOnly",
     "writeOnly",
+    "contentEncoding",
+    "contentMediaType",
 ]
 
 
@@ -45,15 +48,21 @@ class Runner:
 
     def run(self, stdin=sys.stdin):
         for line in stdin:
+            if not line.strip():
+                continue
+
             each = json.loads(line)
             cmd = each.pop("cmd")
+
             response = getattr(self, f"cmd_{cmd}")(**each)
+
             self._stdout.write(json.dumps(response) + "\n")
             self._stdout.flush()
 
     def cmd_start(self, version):
         assert version == 1
         self._started = True
+
         return dict(
             version=1,
             implementation=dict(
@@ -79,51 +88,72 @@ class Runner:
         )
 
     def cmd_dialect(self, dialect):
-        assert self._started, "Not started!"
+        assert self._started
+
         self._DefaultValidator = validator_for({"$schema": dialect})
+
         if use_referencing_library:
             self._default_spec = referencing.jsonschema.specification_with(dialect)
-        return dict(ok=True)
+
+        return {"ok": True}
 
     def extract_annotations(self, schema):
         annotations = {}
 
-        for key in ANNOTATION_KEYS:
-            if key in schema:
-                annotations[key] = [schema[key]]
+        if isinstance(schema, dict):
 
-        # check inside $defs
-        if "$defs" in schema:
-            for name, subschema in schema["$defs"].items():
-                for key in ANNOTATION_KEYS:
-                    if key in subschema:
-                        annotations[key] = [subschema[key]]
+            for key in ANNOTATION_KEYS:
+                if key in schema:
+                    annotations.setdefault(key, []).append(schema[key])
+
+            for value in schema.values():
+                child = self.extract_annotations(value)
+
+                for k, v in child.items():
+                    annotations.setdefault(k, []).extend(v)
+
+        elif isinstance(schema, list):
+
+            for item in schema:
+                child = self.extract_annotations(item)
+
+                for k, v in child.items():
+                    annotations.setdefault(k, []).extend(v)
 
         return annotations
 
     def cmd_run(self, case, seq):
-        assert self._started, "Not started!"
+        assert self._started
+
         schema = case["schema"]
 
         try:
+
             Validator = validator_for(schema, self._DefaultValidator)
-            assert Validator is not None
 
             if use_referencing_library:
+
                 registry = referencing.Registry().with_contents(
                     case.get("registry", {}).items(),
                     default_specification=self._default_spec,
                 )
+
                 validator = Validator(schema, registry=registry)
+
             else:
+
                 registry = case.get("registry", {})
+
                 resolver = RefResolver.from_schema(schema, store=registry)
+
                 validator = Validator(schema, resolver=resolver)
 
             results = []
 
-            for test in case["tests"]:
+            for test in case.get("tests", []):
+
                 instance = test["instance"]
+
                 valid = validator.is_valid(instance)
 
                 annotations = self.extract_annotations(schema)
@@ -135,17 +165,17 @@ class Runner:
                     }
                 )
 
-            return dict(seq=seq, results=results)
+            return {"seq": seq, "results": results}
 
         except Exception:
-            return dict(
-                errored=True,
-                seq=seq,
-                context={"traceback": traceback.format_exc()},
-            )
+
+            return {
+                "errored": True,
+                "seq": seq,
+                "context": {"traceback": traceback.format_exc()},
+            }
 
     def cmd_stop(self):
-        assert self._started, "Not started!"
         sys.exit(0)
 
 
