@@ -1,4 +1,5 @@
 import jsonschema
+from jsonschema.validators import extend
 from .base import ValidatorProtocol
 
 
@@ -15,31 +16,37 @@ ANNOTATION_KEYWORDS = {
 }
 
 
-def collect_annotations(schema, annotations):
-    if isinstance(schema, dict):
-        for key, value in schema.items():
+def make_validator(annotations):
 
-            if key in ANNOTATION_KEYWORDS:
-                annotations.setdefault(key, []).append(value)
+    base = jsonschema.Draft202012Validator
 
-            collect_annotations(value, annotations)
+    validators = {}
 
-    elif isinstance(schema, list):
-        for item in schema:
-            collect_annotations(item, annotations)
+    for keyword in ANNOTATION_KEYWORDS:
+
+        def handler(validator, value, instance, schema, keyword=keyword):
+
+            annotations.setdefault(keyword, []).append(value)
+
+            return []
+
+        validators[keyword] = handler
+
+    return extend(base, validators)
 
 
 class JsonSchemaValidator(ValidatorProtocol):
 
     def validate(self, schema, instance):
 
-        validator = jsonschema.Draft202012Validator(schema)
+        annotations = {}
+
+        AnnotationValidator = make_validator(annotations)
+
+        validator = AnnotationValidator(schema)
 
         errors = list(validator.iter_errors(instance))
 
         valid = len(errors) == 0
-
-        annotations = {}
-        collect_annotations(schema, annotations)
 
         return valid, annotations

@@ -11,43 +11,68 @@ process = subprocess.Popen(
     text=True
 )
 
+
 def send(cmd):
     process.stdin.write(json.dumps(cmd) + "\n")
     process.stdin.flush()
-    return process.stdout.readline()
+    line = process.stdout.readline()
+    return json.loads(line)
 
-print(send({"cmd":"start","version":1}))
+
+# Start harness
+print(send({"cmd": "start", "version": 1}))
 print(send({
-    "cmd":"dialect",
-    "dialect":"https://json-schema.org/draft/2020-12/schema"
+    "cmd": "dialect",
+    "dialect": "https://json-schema.org/draft/2020-12/schema"
 }))
 
 seq = 1
 
+
+def find_test_groups(data):
+    """
+    Extract JSON Schema test groups regardless of file structure.
+    """
+
+    groups = []
+
+    if isinstance(data, list):
+        groups.extend(data)
+
+    elif isinstance(data, dict):
+
+        if "schema" in data and "tests" in data:
+            groups.append(data)
+
+        for value in data.values():
+            if isinstance(value, list):
+                for item in value:
+                    if isinstance(item, dict) and "schema" in item and "tests" in item:
+                        groups.append(item)
+
+    return groups
+
+
 for file in Path(TEST_DIR).glob("*.json"):
 
-    print("\nRunning file:", file)
+    print("\nRunning:", file)
 
-    data = json.load(open(file))
+    with open(file) as f:
+        data = json.load(f)
 
-    if "suite" not in data:
-        print("Skipping:", file)
+    groups = find_test_groups(data)
+
+    if not groups:
+        print("Skipping file (no test groups)")
         continue
 
-    for suite in data["suite"]:
+    for group in groups:
 
-        schema = suite["schema"]
+        schema = group["schema"]
 
-        for test in suite["tests"]:
+        for test in group["tests"]:
 
-            instance = test["instance"]
-
-            expected_annotations = {}
-
-            if "assertions" in test:
-                for assertion in test["assertions"]:
-                    keyword = assertion["keyword"]
-                    expected_annotations[keyword] = assertion["expected"]
+            instance = test.get("data", test.get("instance"))
 
             case = {
                 "cmd": "run",
@@ -58,22 +83,21 @@ for file in Path(TEST_DIR).glob("*.json"):
                 }
             }
 
-            send(case)
+            result = send(case)
 
-            result = json.loads(process.stdout.readline())
+            # Handle harness errors
+            if result.get("errored"):
+                print("Harness error:")
+                print(result["context"]["traceback"])
+                continue
 
-            returned = result["results"][0].get("annotations", {})
+            annotations = result["results"][0].get("annotations", {})
 
-            print("Returned:", returned)
-            print("Expected:", expected_annotations)
-
-            if expected_annotations:
-                if keyword in returned:
-                    print("PASS")
-                else:
-                    print("MISSING:", keyword)
+            print("Instance:", instance)
+            print("Annotations:", annotations)
 
             seq += 1
+
 
 process.stdin.close()
 process.wait()

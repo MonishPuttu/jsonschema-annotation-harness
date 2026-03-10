@@ -7,7 +7,8 @@ class ValidatorProtocol:
         """
         Validate instance against schema.
 
-        Returns:
-            (valid: bool, annotations: dict)
+        Returns
+        -------
+        (valid: bool, annotations: dict)
         """
         raise NotImplementedError
