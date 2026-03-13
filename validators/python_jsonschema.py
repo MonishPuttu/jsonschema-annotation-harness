@@ -19,14 +19,17 @@ ANNOTATION_KEYWORDS = {
 def make_validator(annotations):
 
     base = jsonschema.Draft202012Validator
-
     validators = {}
 
     for keyword in ANNOTATION_KEYWORDS:
 
         def handler(validator, value, instance, schema, keyword=keyword):
 
-            annotations.setdefault(keyword, []).append(value)
+            annotations.append({
+                "keywordLocation": f"/{keyword}",
+                "instanceLocation": "",
+                "annotation": value
+            })
 
             return []
 
@@ -39,7 +42,7 @@ class JsonSchemaValidator(ValidatorProtocol):
 
     def validate(self, schema, instance):
 
-        annotations = {}
+        annotations = []
 
         AnnotationValidator = make_validator(annotations)
 
