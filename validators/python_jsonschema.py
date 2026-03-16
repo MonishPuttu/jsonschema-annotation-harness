@@ -21,21 +21,53 @@ def make_validator(annotations):
     base = jsonschema.Draft202012Validator
     validators = {}
 
-    for keyword in ANNOTATION_KEYWORDS:
+    def walk_schema(schema, path=""):
+        locations = {}
 
-        def handler(validator, value, instance, schema, keyword=keyword):
+        if isinstance(schema, dict):
 
-            annotations.append({
-                "keywordLocation": f"/{keyword}",
-                "instanceLocation": "",
-                "annotation": value
-            })
+            for key, value in schema.items():
 
-            return []
+                new_path = f"{path}/{key}" if path else f"/{key}"
 
-        validators[keyword] = handler
+                if key in ANNOTATION_KEYWORDS:
+                    locations[id(value)] = new_path
 
-    return extend(base, validators)
+                child_locations = walk_schema(value, new_path)
+                locations.update(child_locations)
+
+        elif isinstance(schema, list):
+
+            for i, item in enumerate(schema):
+                new_path = f"{path}/{i}"
+                child_locations = walk_schema(item, new_path)
+                locations.update(child_locations)
+
+        return locations
+
+    def validator_factory(schema):
+
+        keyword_locations = walk_schema(schema)
+
+        for keyword in ANNOTATION_KEYWORDS:
+
+            def handler(validator, value, instance, schema, keyword=keyword):
+
+                keyword_location = keyword_locations.get(id(value), f"/{keyword}")
+
+                annotations.append({
+                    "keywordLocation": keyword_location,
+                    "instanceLocation": "",
+                    "annotation": value,
+                })
+
+                return []
+
+            validators[keyword] = handler
+
+        return extend(base, validators)(schema)
+
+    return validator_factory
 
 
 class JsonSchemaValidator(ValidatorProtocol):
@@ -44,9 +76,9 @@ class JsonSchemaValidator(ValidatorProtocol):
 
         annotations = []
 
-        AnnotationValidator = make_validator(annotations)
+        AnnotationValidatorFactory = make_validator(annotations)
 
-        validator = AnnotationValidator(schema)
+        validator = AnnotationValidatorFactory(schema)
 
         errors = list(validator.iter_errors(instance))
 
